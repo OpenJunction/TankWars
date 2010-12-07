@@ -1,0 +1,15 @@
+\contentsline {section}{\numberline {1}Introduction}{3}
+\contentsline {section}{\numberline {2}Junction}{3}
+\contentsline {section}{\numberline {3}Related Work}{3}
+\contentsline {subsection}{\numberline {3.1}Games}{3}
+\contentsline {subsection}{\numberline {3.2}Croquet}{4}
+\contentsline {subsection}{\numberline {3.3}Database replication}{5}
+\contentsline {subsection}{\numberline {3.4}Groupware, OT, Wave}{5}
+\contentsline {section}{\numberline {4}Design and Implementation}{6}
+\contentsline {section}{\numberline {5}Sample Applications}{6}
+\contentsline {subsection}{\numberline {5.1}Tank Battle}{6}
+\contentsline {subsection}{\numberline {5.2}Jinzora Party Mode}{6}
+\contentsline {subsection}{\numberline {5.3}Results}{7}
+\contentsline {section}{\numberline {6}Future Work}{7}
+\contentsline {subsection}{\numberline {6.1}Exploring different prediction strategies}{7}
+\contentsline {subsection}{\numberline {6.2}Porting}{7}

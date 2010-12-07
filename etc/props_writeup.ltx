@@ -1,0 +1,136 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+
+\author{Alex Favaro, Aemon Cannon}
+
+\title{Junction Props, CS-294s Retrospective}
+
+\begin{document}
+
+
+\maketitle
+
+\newpage
+
+\tableofcontents
+
+\newpage
+
+
+\pagestyle{empty}
+
+
+\section{Introduction}
+Many Junction applications have need of some shared, replicated state \cite{cite_key3}. Currently, this requirement must be met manually by the application programmer. The Junction platform exposes a send/receive messaging interface to the application developer. This is enough for many applications, but when many actors need to interact with a shared data model (consider a collaborative document editor, a multi-user whiteboard, a cooperative game), maintaining consistent state becomes a real challenge. 
+
+The goal of Junction Props is to provide a framework for developing "Props": objects representing shared, replicated state, that abstract away the details of synchronization with remote peers. A developer only needs to define the Prop, adhering to a few constraints. He or she can then go about developing the application with little to no knowledge of the underlying state synchronization mechanisms. The following paper describes the existing Junction framework and related work on shared state programming, outlines the design and implementation of Junction Props, and provides two sample Props applications. We conclude with a discussion of future work for the Props framework. 
+
+\section{Junction}
+
+The Junction framework provides a decentralized platform for ad-hoc networking. Applications communicate with one another via a Junction Switchboard. The Switchboard acts as a simple router, broadcasting each message to all participants in the Junction Activity. There are very few technical requirements for a Junction Switchboard. In fact, the current implementation is simply a wrapper around an XMPP chat room. As a result, Junction messaging is conducted with XMPP messages.
+
+Junction Props makes very few assumptions about the Junction platform. Most critically, we require that all participants in a Junction Activity receive messages in the same order. This requirement could be relaxed in the future, (especially since there has been some work in Junction to support peer-to-peer message sending \cite{cite_key3}), but at the moment we rely on this invariant to simplify our replication scheme.
+
+Peer discovery is outside the scope of Junction Props. The Junction platform already provides several strategies for out-of-band distribution of an activity invitation.
+
+
+\section{Related Work}
+
+\subsection{Games}
+
+Due to their inherent need for shared state, multiplayer games require consistent and reliable synchronization protocols. Most modern multiplayer games rely on a client/server architecture in which a single authoritative server or host is responsible for maintaining consistency across a number of clients \cite{cite_key4},\cite{cite_key10}. Initially, these clients did nothing more than sample user input and forward it to the server, then wait for a response containing a list of objects to render. This approach, while simple and correct, is suboptimal; all user actions are delayed by the round trip time of the client's messages to the server. Many games, especially those played in real time, would be almost unplayable over networks where latency spikes to hundreds of milliseconds \cite{cite_key4}.
+
+Client side prediction is a mechanism for mitigating the effects of latency on gameplay \cite{cite_key10}. In most cases, if the server and clients share identical game logic then client predictions will not conflict with server updates. Updates that do conflict will be fixed by the central authority(server). In this case, high latency is problematic, since unbounded prediction with infrequent server updates can lead to sudden noticeable changes to the client's state. Such state "warps" render some games just as unplayable as those without any prediction at all \cite{cite_key4}. Techniques for improving client side prediction, such as interpolation \cite{cite_key10}, do exist. Nevertheless, any strategy for lag compensation comes with trade offs, and the choice of method usually boils down to a game design decision.
+
+Synchronization in multiplayer games is a challenging task, even under a centralized model. Subtle differences in state tend to snowball into major inconsistencies, making out-of-sync errors extremely difficult to track down. A framework for synchronization which guarantees correctness would be ideal. Such a framework must also be generic enough to support a wide range of data models and transformations and provide enough transparency to the developer to support meaningful design decisions.
+
+\subsection{Croquet}
+The Croquet Project is a framework for developing collaborative virtual worlds. All state is replicated to all peers. There is no application-specific state in the central server, or router. All modifications to the replicated state originate at an Island Replica(peer), and are then distributed to all other peers using the TeaTime algorithm \cite{cite_key12}. Since all peers apply all state mutations in the same order, the state remains consistent. In addition, the TeaTime algorithm synchronizes the progression of time by delaying the application of each message until a 'heart-beat' with greater time-stamp has been received from the router.
+
+The heart-beat mechanism allows detailed simulations to be conducted in Croquet without fear of divergence due to differing computation speeds at the peers. However, it vastly increases the amount of traffic on the network. The virtual-world interface puts an additional requirement on the client: that their machine is capable of rendering a detailed 3D visualization. These factors encourage the view that Croquet is best suited to desktop computers with wired connections to the internet.
+
+
+\subsection{Database replication}
+The general problem of replicating some data-structure among a set of peers is an old one. 
+We attempted to classify our own problem in terms of the Database Replication problem \cite{cite_key13}. The lack of central state corresponds to a lack of a {\it Primary Copy} in the Database parlance. We want our peers to be able to be able to update the state freely at any time, which is known as {\it Update Everywhere}. And our assumption that the Switchboard enforces an order on all messages makes the Switchboard a {\it Serialization Point} in our replication scheme. 
+
+In \cite{cite_key7}, the idea of using a Database Replication scheme to support a multi-player game was explored. The scheme they discussed used transactions to maintain consistency, which introduced a considerable latency for each state modification. 
+
+Rejecting transactions, we chose to pursue an implementation that favored user experience over exact preservation of user-intent, thinking it better to retroactively modify the user's action than to force the user to wait for confirmation of previous actions before performing a new action.
+
+
+\subsection{Groupware, OT, Wave}
+
+Much like Croquet, Groupware systems are designed to support many collaborators modifying state in a shared, virtual environment. A principle design requirement for these systems is that high-latency not adversely affect the experience of the user. These systems, including Grove\cite{cite_key7}, Jupiter\cite{cite_key5}, and Wave\cite{cite_key6}, all allow the user to modify their local state freely, without waiting for remote confirmation. When remote operations are received that conflict with predicted operations (were applied concurrently by remote peers), these operations are {\it transformed} before execution, to preserve global consistency. Starting with \cite{cite_key7}, Groupware systems introduced the concept of Operational Transformation. Given two conflicting operation o1 and o2, the OT function produces o1' and o2' such that the composition o1.o2' and o2.o1' produce the same resulting state.
+
+The correct definition of an OT function with respect to the state and operation of a given application is not trivial \cite{cite_key7}. A chief concern is that the resulting operations should be "intent preserving," which gives the user the impression that their operations are being respected, and not just reversed by the OT.
+
+Recently, Google Wave has brought some publicity to the OT approach \cite{cite_key2}. In their scheme, a central server mediates all activity between peers. This arrangement allows them to optimize away much history retention, which aids in scalability\cite{cite_key2}. All state in a "wave" is represented as an XML document, and all operations (insert text, delete text, etc) mutate this XML document.
+
+Given the high-latency prevalent on mobile platforms, we believed that the adoption of an OT-based scheme was appropriate for Junction Props. In contrast to Wave, we decided to support the definition of arbitrary state representations and arbitrary operations. 
+
+
+\section{Design and Implementation}
+
+Our initial implementation of Junction Props is a plugin for the Java Junction system. The recent addition to Junction of a plugin system, Junction Extras, allowed us to implement Props without any intrusive modification to the existing Junction code-base. The Props system sends messages on behalf of the local Junction Actor, specifying the activity-wide Prop or client-specific Prop Replica for which each message is intended. The Props system consumes these messages before they are visible to the enclosing application.
+
+Our implementation takes special pains to hide the details of its operation from application developers. An app defines the state that the Prop must replicate (including how to serialize and deserialize that state), the operations that act on that state, and an OT function for resolving conflicts. Internally, the Prop manages synchronization using an algorithm known as SOCT4, described in \cite{cite_key1}.
+
+Our implementation supports snap-shotting (the Prop state can be captured as a character string by any peer at any time) and as a result, late-joining (late-comers to the activity are sent the serialized state of a peer).
+
+
+
+\section{Sample Applications}
+
+We used this framework to develop two Android-based demo applications. 
+
+\subsection{Tank Battle}
+
+Tank Battle is a multiplayer tank fighting game for Android. The concept is very simple: kill or be killed. We defined the Prop state for this game to be a list of tanks. Each tank contains a grid position and an aiming direction. Operations on this state include: {\it addUser}, {\it moveUser}, {\it fireHit}, {\it fireMiss}, and {\it die}. 
+
+We found that game design decisions strongly influenced the design of the Prop. For example, we decided early on that the decision of whether or not a shot hits its target would be made local to the peer that fired the shot - in order to improve the perceived responsiveness of the game. As a result, our operations set include distinct actions for firing and {\it hitting} vs firing and {\it missing}.
+
+Furthermore, in defining the OT function for the tank game Prop, we made decisions that affected gameplay. For example, if an {\it addUser} operation conflicts with a {\it moveUser} operation (because they both target the same grid square), the transformed operations will have the affect of negating the move operation (i.e. preferring the add operation).
+
+\subsection{Jinzora Party Mode}
+We extended the existing Jinzora Android music player with a multi-user "party mode". Users select songs from their own libraries and submit them to the "party". All users in the session then vote on these songs, which determines the song that plays next. Audio is heard from any Android device that opts to be in "speaker mode".
+
+The state for this application is a set of songs. Each song has a count of votes, a title, and a playlink. The Prop itself is unsorted. All sorting, for display and to determine the song that will play next, is done on the peer machines. Operations on this state include: {\it add}, {\it delete}, and {\it replace}.
+
+\subsection{Results}
+Overall, we feel that our sample applications demonstrate the flexibility and power of Junction Props. The majority of development time was spent on designing appropriate user interfaces and, in the case of Tank Battle, defining game semantics. In both cases, the Props framework made implementing the required shared state relatively painless and, partly because of the degree to which it encourages an MVC architecture, integrated nicely with the Android platform.
+
+Unsurprisingly, network latency significantly impacted user experience, especially with Tank Battle. Nevertheless, the Props protocol was able to maintain global correctness regardless of how far peer states diverged from one another. As a result, we believe Junction Props has the potential to provide a robust solution to the shared state needs of a wide range of applications.
+
+\section{Future Work}
+
+
+\subsection{Exploring different prediction strategies}
+One lesson that we took from our application development work is that multi-user applications for mobile devices must deal with very poor network conditions. Inconsistent connectivity was the most common problem. In these conditions, applications that demand real-time interactivity are problematic. Unbounded client-side prediction is actually a liability when connectivity is spotty, as clients cannot respond to each other's actions in real-time. We would like to explore alternatives to the unbounded OT mechanism that we are currently using to support client-side prediction. We imagine a scheme that trades the 'intent preservation' of OT for simpler/faster implementation(read: easier to port) and less burden on the app developer (definitions of OT functions not required).
+
+\subsection{Porting}
+Part of the promise of the Junction platform is the freedom to implement clients on diverse platforms \cite{cite_key3}. Junction Props is only available for Java clients at the moment. We felt that porting early on would be ill-advised, as the Props protocol and architecture was and still is in flux. As the design has begun to settle down, it now makes sense to port the Props library to Javascript and eventually iPhone.
+
+
+
+\begin{thebibliography}{99}
+\bibitem[1]{cite_key1} Vidot N., Cart M., Ferrie J., Suleiman M. {\it Copies convergence in a distributed real-time collaborative environment} {\bf 2000}.
+\bibitem[2]{cite_key2} Spiewak D. {\it Code Commit - Understanding and Applying Operation Transformation} {\bf May 2010}.
+\bibitem[3]{cite_key3} Dodson B, Nguyen C, Huang T, Lam M.S. {\it Junction: a Decentralized Platform for Ad Hoc Mobile Social Applications} {\bf March 2010}.
+\bibitem[4]{cite_key4} Liang D., Boustead P. {\it Using Local Lag and Timewarp to Improve Performance for Real Life Multi-player Online Games} {\bf October 2006}.
+\bibitem[5]{cite_key5} Nichols D.A., Curtis P., Dixon M., Lamping J. {\it High-Latency, Low-Bandwidth Windowing in the Jupiter Collaboration System } {\bf 1995}.
+\bibitem[6]{cite_key6} Wang D., Mah A. {\it Google Wave Operation Transformation } {\bf 2009}.
+\bibitem[7]{cite_key7} Lin Y., Kemme B., Patino-Martinez M., Jimenez-Peris R. {\it Applying Database Replication to Multi-player Online Games } {\bf 2006}.
+\bibitem[9]{cite_key9} Ellis C.A., Gibbs S.J. {\it Concurrency Control in Groupware Systems } {\bf 1989}.
+\bibitem[10]{cite_key10} Bernier Y.W. {\it Latency Compensating Methods in Client/Server In-game Protocol Design and Optimization }.
+\bibitem[11]{cite_key11} The Croquet Consortium. {\it SDK Documentation: The Core Model } {\bf April 2007}.
+\bibitem[12]{cite_key12} Wikipedia, many authors. {\it Croquet Project }.
+\bibitem[13]{cite_key13} Wiesmann M., Pedone F., Schiper A., Kemme B., Alonso G. {\it Databse Replication Techniques: a Three Parameter Classification } {\bf October 2000}.
+
+\end{thebibliography}
+
+
+
+\end{document}
+

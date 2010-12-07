@@ -1,0 +1,9 @@
+;; This config was generated using ensime-config-gen. Feel free to customize its contents manually.
+
+(
+
+:project-package "edu.stanford.junction.sample.tower_defense"
+:compile-jars ("/home/aemon/lib/android/platforms/android-7")
+:use-sbt t
+
+)

@@ -8,6 +8,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.drawable.Drawable
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Message
@@ -27,6 +28,7 @@ import edu.stanford.junction.android.AndroidJunctionMaker
 import edu.stanford.junction.Junction
 import edu.stanford.junction.api.activity.JunctionActor
 import edu.stanford.junction.api.activity.JunctionExtra
+import edu.stanford.junction.api.activity.ActivityScript
 import edu.stanford.junction.api.messaging.MessageHeader
 import edu.stanford.junction.provider.xmpp.XMPPSwitchboardConfig
 import edu.stanford.junction.props2._
@@ -36,13 +38,18 @@ import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
 import scala.concurrent.MailBox
 import java.net.URI
-import java.util.Date
 import org.json._
 import scala.math._
-import java.util.Timer;
-import java.util.TimerTask;
-import java.io.FileOutputStream
-import java.io.FileInputStream
+import java.util.Date
+import java.util.Timer
+import java.util.TimerTask
+import java.io._
+import org.apache.http.client._
+import org.apache.http.client.entity._
+import org.apache.http._
+import org.apache.http.message._
+import org.apache.http.client.methods._
+import org.apache.http.impl.client._
 
 object GameView {
   val TAG: String = "TowerActivity"
@@ -63,6 +70,7 @@ class GameView(context: Context, attrs: AttributeSet) extends SurfaceView(contex
   private val boardProp = new BoardProp("Board", 0, 0, w, h)
   private val rng = new Random()
   private var me = new User("aemon", 2, 5)
+  private var mJunctionURI: Option[URI] = None
 
   Sound.loadSounds(context)
 
@@ -99,7 +107,7 @@ class GameView(context: Context, attrs: AttributeSet) extends SurfaceView(contex
               Sound.playShot
               thread.showFireMiss(op, boardProp)
             }
-            case "fireDieOp" =>
+            case "dieOp" =>
               {
               Sound.playExplosion
               thread.showDeath(op, boardProp)
@@ -152,19 +160,57 @@ class GameView(context: Context, attrs: AttributeSet) extends SurfaceView(contex
     }
     override def onActivityJoin() {
       Log.i("TowerActivity", "Joined activity!")
-      //boardProp.addUser(me)
     }
     override def onActivityCreate() {
+      Log.i("TowerActivity", "Created activity!")
       thread.init(boardProp)
       boardProp.addUser(me)
     }
   }
 
+  def startStats() {
+    boardProp.startCollectingStats()
+  }
+
+
+  def saveStats() {
+    val stats = boardProp.getAndDisableStats()
+    try { 
+      val w1 = new BufferedWriter(new FileWriter("/sdcard/tank-stats/tanks_stats_rtt.txt"));
+      stats.writeRTT(w1)
+      w1.flush()
+      w1.close()
+
+      val w2 = new BufferedWriter(new FileWriter("/sdcard/tank-stats/tanks_stats_pred.txt"));
+      stats.writePredictions(w2)
+      w2.flush()
+      w2.close()
+
+      val w3 = new BufferedWriter(new FileWriter("/sdcard/tank-stats/tanks_stats_conf.txt"));
+      stats.writeConflicts(w3)
+      w3.flush()
+      w3.close()
+
+      println("Finished logging statistics.")
+    } catch {
+      case e: IOException => {
+        e.printStackTrace(System.err)
+      }
+    }
+  }
+
   def initJunctionConnection() {
-    val jxURI = new URI("junction://sb.openjunction.org/tankwars#xmpp");
+    val jxURI = mJunctionURI.getOrElse(new URI("junction://sb.openjunction.org/tankwars#xmpp"));
+    println("Connecting to: " + jxURI + "...")
     val config = AndroidJunctionMaker.getDefaultSwitchboardConfig(jxURI)
     val jxMaker = AndroidJunctionMaker.getInstance(config)
-    val jx = jxMaker.newJunction(jxURI, actor)
+    val script = new ActivityScript()
+    script.setActivityID("tankwars")
+    script.setFriendlyName("TankWars")
+    val json = new JSONObject()
+    json.put("package", "edu.stanford.junction.sample.tower_defense")
+    script.addRolePlatform("participant", "android", json)
+    val jx = jxMaker.newJunction(jxURI, script, actor)
   }
 
   /** The thread that actually draws the animation */
@@ -185,8 +231,14 @@ class GameView(context: Context, attrs: AttributeSet) extends SurfaceView(contex
    */
   def getThread(): GameThread = thread
 
+  /**
+   * Installs a pointer to the text view used for messages.
+   */
+  def setJunctionURI(uri: URI) {
+    mJunctionURI = Some(uri)
+  }
+
   def finish() {
-    //    boardProp.kill(me)
     saveUserId()
     actor.leave()
     thread.setRunning(false)

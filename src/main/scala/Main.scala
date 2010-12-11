@@ -406,9 +406,9 @@ class Frame extends PFrame {
 
 }
 
-object Main {
-  def main(args: Array[String]) {
-    new Frame()
-  }
-}
+//object Main {
+//  def main(args: Array[String]) {
+//    new Frame()
+//  }
+//}
 

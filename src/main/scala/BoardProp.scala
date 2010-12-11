@@ -22,6 +22,10 @@ class BoardProp(propName: String, winX: Int, winY: Int, winW: Int, winH: Int) ex
     withBoardState(s => s.getUser(userId))
   }
 
+  def getAllUsers(): List[User] = {
+    withBoardState(s => s.getAllUsers())
+  }
+
   def userAt(x: Int, y: Int): Option[User] = {
     withBoardState(s => s.userAt(x,y))
   }
@@ -258,6 +262,8 @@ class BoardState(u: Iterable[User], obs: Iterable[Obstacle]) extends IPropState 
   def hash(): String = users.map(_.hash()).mkString("|")
 
   def getUser(userId: String): Option[User] = users.find(_.id == userId)
+
+  def getAllUsers(): List[User] = users.toList
 
   def userAt(x: Int, y: Int): Option[User] = users.find(u => u.boardX == x && u.boardY == y)
 
